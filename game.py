@@ -14,6 +14,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 import torchvision.transforms as T
 from torch.utils.data import Dataset
+
 class LazyFrames(object):
     '''
     reference: https://github.com/openai/baselines/blob/master/baselines/common/atari_wrappers.py#L194
@@ -50,36 +51,26 @@ class Game(Dataset):
         self.actions = self.env.action_space
 
     def get_state(self):
-        '''
-        returns B x C x H x W array (1 x 3 x 160 x 210)
-        '''
-        # frames = LazyFrames(self.frames)
-        transformed = torch.zeros((1, 4, 84, 84)).byte()
-        screens = torch.zeros((1, 4, 3, 210, 160)).byte()
-        for i in range(self.keep_frames):
-          # Convert to float, rescare, convert to torch tensor
-          # (this doesn't require a copy)
-          # screen = np.ascontiguousarray(screen, dtype=np.float32) / 255
-          # screen = np.ascontiguousarray(self.frames[i], dtype=np.uint8)
-          screen = torch.from_numpy(self.frames[i]).float()
-          # Resize, and add a batch dimension (BCHW)
-          if(self.transform):
-              transformed[0, i]  = (self.transform(screen) * 255).byte()
-          screens[0, i] = screen.byte()
-        return transformed, screens
+        return np.stack(self.frames, axis=2)
 
     def get_screen(self):
         return self.env.render(mode='rgb_array').transpose((2, 0, 1))
 
+    def transform_screen(self, screen):
+        transformed = self.transform(torch.from_numpy(screen).float())
+        return (transformed * 256).byte().numpy()
+
     def apply_action(self, action):
         obs, reward, done, _ = self.env.step(action)
         screen = self.get_screen()
-        self.frames.append(screen)
-        states = self.get_state()
-        return states, reward, done, _
+        transformed = self.transform_screen(screen)
+        self.frames.append(transformed)
+        return obs, reward, done, _
 
     def reset(self):
         obs = self.env.reset()
         screen = self.get_screen()
+        transformed = self.transform_screen(screen)
         for i in range(self.keep_frames):
-            self.frames.append(screen)
+            self.frames.append(transformed)
+        return obs

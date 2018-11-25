@@ -25,16 +25,15 @@ class ReplayMemory(object):
         self.abs_err_upper = 1.0
 
         self.capacity = capacity
-        self.tree = np.zeros(2*capacity - 1)
-        self.memory = np.zeros(capacity, dtype=object)
+        self.tree = np.zeros(2 * capacity - 1)
+        self.memory = []
         self.position = 0
         self.num_pushed = 0
-
 
     def get_leaf_node(self, value):
         parent_index = 0
         while True:
-            left_child_index = 2*parent_index + 1
+            left_child_index = 2 * parent_index + 1
             right_child_index = left_child_index + 1
 
             if (left_child_index >= len(self.tree)):
@@ -124,7 +123,6 @@ class ReplayMemory(object):
         while(tree_id != 0):
             tree_id = (tree_id - 1) // 2
             self.tree[tree_id] += change
-
 
     def update_tree_nodes(self, tree_ids, abs_errors):
         abs_errors += self.PER_e

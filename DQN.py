@@ -67,7 +67,7 @@ class DQN(nn.Module):
         decay_factor = math.exp(-1. * self.steps / EPS_DECAY)
         return EPS_END + (EPS_START - EPS_END) * decay_factor
 
-    def get_action(self, state):
+    def get_greedy_action(self, state):
         '''
         gets action based on e-greedy algorithm
         '''
@@ -75,7 +75,47 @@ class DQN(nn.Module):
         eps = self._get_eps()
         if(random.random() > eps):
             with torch.no_grad():
-                return self.forward(state).max(1)[1].view(1, 1)
+                return self.forward(state).max(1)[1].item()
         else:
             random_actions = random.randrange(self.num_actions)
-            return torch.tensor([[random_actions]], device=self.device).long()
+            return random_actions
+
+    def get_action(self, state):
+        with torch.no_grad():
+            return self.forward(state).max(1)[1].item()
+
+    def calculate_loss(experience, weights):
+        states, actions, next_states, rewards, dones = experience
+        states = torch.cat(states)
+        actions = torch.cat(actions)
+        rewards = torch.cat(rewards)
+        weights = torch.tensor(weights).to(device)
+
+        valid_next_states = [
+            next_states[i]
+            for i, done in enumerate(dones)
+            if not done
+        ]
+        valid_next_masks = [not done for done in dones]
+
+        next_states = torch.cat(valid_next_states)
+        next_masks = torch.tensor(valid_next_masks,
+                                  device=device,
+                                  dtype=torch.uint8)
+
+        # all state_action value pairs = Q(S_t, A_1...T)
+        all_q = policy(states)
+
+        # actual state_action value pairs = Q(S_t, A_t)
+        best_q = all_q.gather(1, actions)
+        # compute state values V(S_t+1) using target network
+        with torch.no_grad():
+            all_expected_q = torch.zeros(BATCH_SIZE, device=device)
+            all_expected_q[next_masks] = target(next_states).max(1)[0]
+            best_expected_q = (all_expected_q * REWARD_DECAY) + rewards
+
+        q_diff = best_expected_q - best_q[:, 0]
+        loss = (weights * q_diff.pow(2)).mean()
+        errors = torch.abs(q_diff).detach()
+        return loss, errors, rewards.mean()
+ 
