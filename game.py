@@ -72,7 +72,7 @@ class Game(Dataset):
         return self.env.render(mode='rgb_array').transpose((2, 0, 1))
 
     def apply_action(self, action):
-        obs, reward, done, _ = self.env.step(action.item())
+        obs, reward, done, _ = self.env.step(action)
         screen = self.get_screen()
         self.frames.append(screen)
         states = self.get_state()

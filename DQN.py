@@ -19,8 +19,8 @@ EPS_END = 0.1
 EPS_DECAY = 200
 EPS_STEP_END = 1000000
 
-class DQN(nn.Module):
 
+class DQN(nn.Module):
     def __init__(self, num_actions):
         super(DQN, self).__init__()
         '''
@@ -30,29 +30,24 @@ class DQN(nn.Module):
         self.num_actions = num_actions
         self.device = torch.device('cpu')
         self.steps = 0
-        # 1x84x84 => 16x20x20
-        self.conv1 = nn.Conv2d(4, 16, kernel_size=8, stride=4)
-        # 16x20x20 => 32x9x9
-        self.conv2 = nn.Conv2d(16, 32, kernel_size=4, stride=2)
-        self.action_fc = nn.Linear(32*9*9, 256)
-        self.state_fc = nn.Linear(32*9*9, 256)
-        self.action_values = nn.Linear(256, num_actions)
-        self.state_values = nn.Linear(256, 1)
         # 1x84x84 => 32x20x20
-        # self.conv1 = nn.Conv2d(4, 32, kernel_size=8, stride=4)
-        # self.bn1 = nn.BatchNorm2d(32)
+        self.conv1 = nn.Conv2d(4, 32, kernel_size=8, stride=4)
         # 32x20x20 => 64x9x9
-        # self.conv2 = nn.Conv2d(32, 64, kernel_size=4, stride=2)
-        # self.bn2 = nn.BatchNorm2d(64)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=4, stride=2)
         # 64x9x9 => 128x7x7
-        # self.conv3 = nn.Conv2d(64, 128, kernel_size=3, stride=1)
-        # self.bn3 = nn.BatchNorm2d(128)
+        self.conv3 = nn.Conv2d(64, 128, kernel_size=3, stride=1)
         # 128*7*7 => num actions
-        # self.action_fc = nn.Linear(128*7*7, 512)
-        # self.state_fc = nn.Linear(128*7*7, 512)
-        # self.action_values = nn.Linear(512, num_actions)
-        # self.state_values = nn.Linear(512, 1)
-
+        self.feature_extraction = nn.Sequential(
+            self.conv1,
+            nn.ReLU(),
+            self.conv2,
+            nn.ReLU(),
+            self.conv3,
+            nn.ReLU())
+        self.action_fc = nn.Linear(128 * 7 * 7, 512)
+        self.state_fc = nn.Linear(128 * 7 * 7, 512)
+        self.action_values = nn.Linear(512, num_actions)
+        self.state_values = nn.Linear(512, 1)
 
     def to(self, device):
         super(DQN, self).to(device)
@@ -60,23 +55,17 @@ class DQN(nn.Module):
         return self
 
     def forward(self, x):
-        x = x.float() / 255
-        x = F.relu(self.conv1(x))
-        x = F.relu(self.conv2(x))
-        # x = F.relu(self.conv3(x))
-        # x = F.relu(self.bn1(self.conv1(x)))
-        # x = F.relu(self.bn2(self.conv2(x)))
-        # x = F.relu(self.bn3(self.conv3(x)))
-        x = x.view(x.size(0), -1)
-        action_value = self.action_values(self.action_fc(x))
-        state_value = self.state_values(self.state_fc(x))
-        q_values = state_value + action_value + action_value.mean(dim=1).view(-1, 1)
-        return q_values
+        x = x.float() / 256
+        x = self.feature_extraction(x).view(x.size(0), -1)
+        action_v = self.action_values(self.action_fc(x))
+        state_v = self.state_values(self.state_fc(x))
+        return state_v + action_v - action_v.mean(dim=1).view(-1, 1)
 
     def _get_eps(self):
         if(self.steps > EPS_STEP_END):
             return 0
-        return EPS_END + (EPS_START - EPS_END) * math.exp(-1. * self.steps / EPS_DECAY)
+        decay_factor = math.exp(-1. * self.steps / EPS_DECAY)
+        return EPS_END + (EPS_START - EPS_END) * decay_factor
 
     def get_action(self, state):
         '''

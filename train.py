@@ -63,25 +63,26 @@ def experience_replay_update(experience, weights):
     valid_next_masks = [not done for done in dones]
 
     next_states = torch.cat(valid_next_states)
-    next_masks = torch.tensor(valid_next_masks, device=device, dtype=torch.uint8)
+    next_masks = torch.tensor(valid_next_masks,
+                              device=device,
+                              dtype=torch.uint8)
 
     # all state_action value pairs = Q(S_t, A_1...T)
-    all_state_action_values = policy(states)
+    all_q = policy(states)
 
     # actual state_action value pairs = Q(S_t, A_t)
-    state_action_values = all_state_action_values.gather(1, actions)
+    best_q = all_q.gather(1, actions)
     # compute state values V(S_t+1) using target network
     with torch.no_grad():
-        next_state_values = torch.zeros(BATCH_SIZE, device=device)
-        next_state_values[next_masks] = target(next_states).max(1)[0]
-        expected_state_action_values = (next_state_values * REWARD_DECAY) + rewards
+        all_expected_q = torch.zeros(BATCH_SIZE, device=device)
+        all_expected_q[next_masks] = target(next_states).max(1)[0]
+        best_expected_q = (all_expected_q * REWARD_DECAY) + rewards
 
-    # loss = F.smooth_l1_loss(state_action_values,
-    #                         expected_state_action_values.unsqueeze(1))
-    state_action_diff = expected_state_action_values - state_action_values[:, 0]
-    loss = (weights * state_action_diff.pow(2)).mean()
-    errors = torch.abs(state_action_diff).detach()
+    q_diff = best_expected_q - best_q[:, 0]
+    loss = (weights * q_diff.pow(2)).mean()
+    errors = torch.abs(q_diff).detach()
     return loss, errors, rewards.mean()
+
 
 # initialize
 game.reset()
@@ -92,9 +93,8 @@ print('Filling up memory')
 # first fill in memory with experiences
 for t in range(MEMORY_CAPACITY):
     # sample action from observed state
-    with torch.no_grad():
-        policy.steps = 0
-        action = policy.get_action(state)
+    action = torch.tensor([game.actions.sample()],
+                          dtype=torch.long, device=device)
     obs, reward, done, info = game.apply_action(action)
 
     if(done):
@@ -103,7 +103,7 @@ for t in range(MEMORY_CAPACITY):
     else:
         next_state, screen = game.get_state()
         next_state = next_state.to(device)
-    reward_tensor = torch.tensor([reward]).to(device)
+    reward_tensor = torch.tensor([reward], device=device)
     if((t % 5000) == 0):
         print("filled in {}".format(t))
     memory.push((state, action, next_state, reward_tensor, done))
@@ -117,6 +117,7 @@ for episode in range(NUM_EPISODES):
 
     state, screen = game.get_state()
     state = state.to(device)
+
     episode_loss = 0
     episode_reward = 0
     episode_errors = 0
@@ -151,7 +152,8 @@ for episode in range(NUM_EPISODES):
 
             # perform standard DQN update with experience replay
             indices, experience, weights = memory.sample(BATCH_SIZE)
-            loss, errors, reward = experience_replay_update(experience, weights)
+            loss, errors, reward = experience_replay_update(experience,
+                                                            weights)
             memory.update_tree_nodes(indices, errors)
             loss.backward()
 
@@ -160,13 +162,8 @@ for episode in range(NUM_EPISODES):
             episode_errors += errors.mean().item()
             episode_update += 1
             # clip gradient
-            clip_grad_value_(policy.parameters(), GRAD_CLIP)
+            # clip_grad_value_(policy.parameters(), GRAD_CLIP)
             optimizer.step()
-            writer.add_scalar('data/loss', loss.item(), policy.steps)
-            writer.add_scalar('data/eps', policy._get_eps(), policy.steps)
-            writer.add_scalar('data/reward', reward.item(), policy.steps)
-            writer.add_scalar('data/errors', errors.mean().item(), policy.steps)
-
         # check if game is done
         if(done):
             break
@@ -179,9 +176,10 @@ for episode in range(NUM_EPISODES):
       episode_reward = 0
       episode_errors = 0
 
-    writer.add_scalar('data/episode_loss', episode_loss, episode)
+    num_frames = len(episode_video_frames)
+
     writer.add_scalar('data/episode_reward', episode_reward, episode)
-    writer.add_scalar('data/episode_errors', episode_errors, episode)
+    writer.add_scalar('data/episode_length', num_frames, episode)
 
     # update target network from current policy network
     if((episode + 1) % TARGET_UPDATE == 0):
