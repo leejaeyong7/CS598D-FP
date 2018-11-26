@@ -29,25 +29,43 @@ class DQN(nn.Module):
         '''
         self.num_actions = num_actions
         self.device = torch.device('cpu')
+
+
         self.steps = 0
         # 1x84x84 => 32x20x20
         self.conv1 = nn.Conv2d(4, 32, kernel_size=8, stride=4)
         # 32x20x20 => 64x9x9
         self.conv2 = nn.Conv2d(32, 64, kernel_size=4, stride=2)
-        # 64x9x9 => 128x7x7
-        self.conv3 = nn.Conv2d(64, 128, kernel_size=3, stride=1)
         # 128*7*7 => num actions
         self.feature_extraction = nn.Sequential(
             self.conv1,
             nn.ReLU(),
             self.conv2,
-            nn.ReLU(),
-            self.conv3,
             nn.ReLU())
-        self.action_fc = nn.Linear(128 * 7 * 7, 512)
-        self.state_fc = nn.Linear(128 * 7 * 7, 512)
-        self.action_values = nn.Linear(512, num_actions)
-        self.state_values = nn.Linear(512, 1)
+        self.action_fc = nn.Linear(64* 9 * 9, 256)
+        self.state_fc = nn.Linear(64 * 9 * 9, 256)
+        self.action_values = nn.Linear(256, num_actions)
+        self.state_values = nn.Linear(256, 1)
+
+        # self.steps = 0
+        # # 1x84x84 => 32x20x20
+        # self.conv1 = nn.Conv2d(4, 32, kernel_size=8, stride=4)
+        # # 32x20x20 => 64x9x9
+        # self.conv2 = nn.Conv2d(32, 64, kernel_size=4, stride=2)
+        # # 64x9x9 => 128x7x7
+        # self.conv3 = nn.Conv2d(64, 128, kernel_size=3, stride=1)
+        # # 128*7*7 => num actions
+        # self.feature_extraction = nn.Sequential(
+        #     self.conv1,
+        #     nn.ReLU(),
+        #     self.conv2,
+        #     nn.ReLU(),
+        #     self.conv3,
+        #     nn.ReLU())
+        # self.action_fc = nn.Linear(128 * 7 * 7, 512)
+        # self.state_fc = nn.Linear(128 * 7 * 7, 512)
+        # self.action_values = nn.Linear(512, num_actions)
+        # self.state_values = nn.Linear(512, 1)
 
     def to(self, device):
         super(DQN, self).to(device)
@@ -55,7 +73,6 @@ class DQN(nn.Module):
         return self
 
     def forward(self, x):
-        x = x.float() / 256
         x = self.feature_extraction(x).view(x.size(0), -1)
         action_v = self.action_values(self.action_fc(x))
         state_v = self.state_values(self.state_fc(x))
@@ -67,55 +84,21 @@ class DQN(nn.Module):
         decay_factor = math.exp(-1. * self.steps / EPS_DECAY)
         return EPS_END + (EPS_START - EPS_END) * decay_factor
 
-    def get_greedy_action(self, state):
+    def get_greedy_action(self, state, update_step=True):
         '''
         gets action based on e-greedy algorithm
         '''
-        self.steps += 1
+        if(update_step):
+            self.steps += 1
         eps = self._get_eps()
         if(random.random() > eps):
-            with torch.no_grad():
-                return self.forward(state).max(1)[1].item()
+            return self.get_action(state)
         else:
             random_actions = random.randrange(self.num_actions)
             return random_actions
 
     def get_action(self, state):
+        dstate = (torch.tensor(state).float() / 256.0).to(self.device)
         with torch.no_grad():
-            return self.forward(state).max(1)[1].item()
+            return self.forward(dstate).max(1)[1].item()
 
-    def calculate_loss(experience, weights):
-        states, actions, next_states, rewards, dones = experience
-        states = torch.cat(states)
-        actions = torch.cat(actions)
-        rewards = torch.cat(rewards)
-        weights = torch.tensor(weights).to(device)
-
-        valid_next_states = [
-            next_states[i]
-            for i, done in enumerate(dones)
-            if not done
-        ]
-        valid_next_masks = [not done for done in dones]
-
-        next_states = torch.cat(valid_next_states)
-        next_masks = torch.tensor(valid_next_masks,
-                                  device=device,
-                                  dtype=torch.uint8)
-
-        # all state_action value pairs = Q(S_t, A_1...T)
-        all_q = policy(states)
-
-        # actual state_action value pairs = Q(S_t, A_t)
-        best_q = all_q.gather(1, actions)
-        # compute state values V(S_t+1) using target network
-        with torch.no_grad():
-            all_expected_q = torch.zeros(BATCH_SIZE, device=device)
-            all_expected_q[next_masks] = target(next_states).max(1)[0]
-            best_expected_q = (all_expected_q * REWARD_DECAY) + rewards
-
-        q_diff = best_expected_q - best_q[:, 0]
-        loss = (weights * q_diff.pow(2)).mean()
-        errors = torch.abs(q_diff).detach()
-        return loss, errors, rewards.mean()
- 

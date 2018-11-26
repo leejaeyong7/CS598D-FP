@@ -26,7 +26,7 @@ class ReplayMemory(object):
 
         self.capacity = capacity
         self.tree = np.zeros(2 * capacity - 1)
-        self.memory = []
+        self.memory = np.zeros(capacity, dtype=object)
         self.position = 0
         self.num_pushed = 0
 
@@ -56,7 +56,6 @@ class ReplayMemory(object):
         # prevents 0 probability
         if(max_p == 0):
             max_p = self.abs_err_upper
-
         self.add_node_to_tree(max_p, data)
         self.num_pushed += 1
 
@@ -67,7 +66,6 @@ class ReplayMemory(object):
         actions = []
         rewards = []
         dones = []
-        memory = (states, actions, next_states, rewards, dones)
         weights = np.empty((batch_size, 1), dtype=np.float32)
 
         total_priority = self.get_total_priority()
@@ -99,6 +97,11 @@ class ReplayMemory(object):
             dones.append(done)
             weights[i] = weight
 
+        memory = (np.stack(states).squeeze(1).astype(np.float32) / 256.0,
+                  np.stack(actions).astype(np.long),
+                  np.stack(next_states).squeeze(1).astype(np.float32) / 256.0,
+                  np.stack(rewards).astype(np.float32),
+                  np.stack(dones).astype(np.uint8))
         return indices, memory, weights
 
     def get_total_priority(self):

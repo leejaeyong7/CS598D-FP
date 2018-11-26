@@ -51,7 +51,7 @@ class Game(Dataset):
         self.actions = self.env.action_space
 
     def get_state(self):
-        return np.stack(self.frames, axis=2)
+        return np.stack(self.frames, axis=1)
 
     def get_screen(self):
         return self.env.render(mode='rgb_array').transpose((2, 0, 1))
