@@ -30,6 +30,7 @@ REWARD_DECAY = 0.99
 GRAD_CLIP = 1
 TARGET_UPDATE = 50000
 NUM_FRAMES = 50000000
+LEARNING_RATE = 0.00025
 
 MODEL_PATH = './dqn-tennis.model'
 
@@ -48,7 +49,7 @@ target.eval()
 
 writer = SummaryWriter()
 
-optimizer = optim.RMSprop(policy.parameters())
+optimizer = optim.RMSprop(policy.parameters(), lr=LEARNING_RATE)
 
 MEMORY_CAPACITY = 1000000
 memory = ReplayMemory(MEMORY_CAPACITY)
@@ -58,7 +59,7 @@ def calculate_loss(experience, weights):
     states, actions, next_states, rewards, dones = experience
     states = torch.tensor(states).to(device)
     actions = torch.tensor(actions).to(device)
-    rewards = torch.tensor(rewards).to(device)
+    rewards = torch.tensor(rewards).to(device).view(-1, 1)
     next_states = torch.tensor(next_states).to(device)
     masks = torch.tensor(dones).to(device)
     weights = torch.tensor(weights).to(device)
@@ -67,14 +68,17 @@ def calculate_loss(experience, weights):
     all_q = policy(states)
 
     # actual state_action value pairs = Q(S_t, A_t)
-    best_q = all_q.gather(1, actions.view(-1, 1))
+    q = all_q.gather(1, actions.view(-1, 1))
+
     # compute state values V(S_t+1) using target network
     with torch.no_grad():
-        all_expected_q = target(next_states).max(1)[0]
-        all_expected_q[masks] = 0.0
-        best_expected_q = (all_expected_q * REWARD_DECAY) + rewards
+        best_expected_actions = policy(next_states).max(1)[1]
+        all_expected_target_q = target(next_states)
+        best_expected_target_q = all_expected_target_q.gather(1, best_expected_actions.view(-1, 1))
+        best_expected_target_q[masks] = 0.0
+        expected_target_q = (best_expected_target_q * REWARD_DECAY) + rewards
 
-    q_diff = best_expected_q - best_q[:, 0]
+    q_diff = expected_target_q - q
     loss = (weights * q_diff.pow(2)).mean()
     errors = torch.abs(q_diff).detach()
     return loss, errors, rewards.mean()
@@ -114,8 +118,6 @@ for episode in count():
     episode_update_reward = 0
     episode_update = 0
 
-
-
     state = game.get_state()
     for t in count():
         # sample action from observed state
@@ -137,7 +139,7 @@ for episode in count():
         loss.backward()
 
         # clip gradient
-        # clip_grad_value_(policy.parameters(), GRAD_CLIP)
+        clip_grad_value_(policy.parameters(), GRAD_CLIP)
 
         optimizer.step()
 
@@ -145,7 +147,7 @@ for episode in count():
         episode_update_reward += reward.item()
         episode_update += 1
         total_frame_count += 1
-        writer.add_scalar('data/frame', t, total_frame_count)
+        writer.add_scalar('data/loss', loss.item(), total_frame_count)
         writer.add_scalar('data/eps', policy._get_eps(), total_frame_count)
 
         # perform total frame count based updates
@@ -163,8 +165,8 @@ for episode in count():
     writer.add_scalar('data/episode_reward', episode_reward, episode)
     writer.add_scalar('data/episode_length', episode_update, episode)
 
-    # create video every 30 episodes
-    if((episode % 30) == 0):
+    # create video every 100 episodes
+    if((episode % 100) == 0):
         policy.eval()
         obs = game.reset()
         episode_video_frames = []
@@ -172,7 +174,7 @@ for episode in count():
             action = policy.get_greedy_action(state, False)
             obs, _, done, _ = game.apply_action(action)
             episode_video_frames.append(obs)
-            if(done or t > 10000):
+            if(done or t > 3000):
               break
         # stacked with T, H, W, C
         stacked_frames = np.stack(episode_video_frames).transpose(3, 0, 1, 2)
