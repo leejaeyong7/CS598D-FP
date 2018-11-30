@@ -175,7 +175,7 @@ for episode in count():
             obs, _, done, _ = game.apply_action(action)
             episode_video_frames.append(obs)
             if(done or t > 3000):
-              break
+                break
         # stacked with T, H, W, C
         stacked_frames = np.stack(episode_video_frames).transpose(3, 0, 1, 2)
         stacked_frames = np.expand_dims(stacked_frames, 0)
@@ -183,5 +183,5 @@ for episode in count():
         writer.add_video('video/episode', stacked_frames, episode)
 
     if(total_frame_count > NUM_FRAMES):
-      torch.save(policy, MODEL_PATH)
-      break
+        torch.save(policy, MODEL_PATH)
+        break

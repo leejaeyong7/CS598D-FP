@@ -15,32 +15,6 @@ import torch.nn.functional as F
 import torchvision.transforms as T
 from torch.utils.data import Dataset
 
-class LazyFrames(object):
-    '''
-    reference: https://github.com/openai/baselines/blob/master/baselines/common/atari_wrappers.py#L194
-    '''
-    def __init__(self, frames):
-        self._frames = frames
-        self._out = None
-
-    def _force(self):
-        if self._out is None:
-            self._out = np.concatenate(self._frames, axis=-1)
-            self._frames = None
-        return self._out
-
-    def __array__(self, dtype=None):
-        out = self._force()
-        if dtype is not None:
-            out = out.astype(dtype)
-        return out
-
-    def __len__(self):
-        return len(self._force())
-
-    def __getitem__(self, i):
-        return self._force()[i]
-
 class Game(Dataset):
     def __init__(self, gym_game_type, transform, keep_frames=4):
         self.env = gym.make(gym_game_type).unwrapped
@@ -57,8 +31,7 @@ class Game(Dataset):
         return self.env.render(mode='rgb_array').transpose((2, 0, 1))
 
     def transform_screen(self, screen):
-        transformed = self.transform(torch.from_numpy(screen).float())
-        return (transformed * 256).byte().numpy()
+        return self.transform(torch.from_numpy(screen))
 
     def apply_action(self, action):
         obs, reward, done, _ = self.env.step(action)
