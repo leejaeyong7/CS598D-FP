@@ -42,6 +42,8 @@ class Game(Dataset):
 
     def reset(self):
         obs = self.env.reset()
+        # since we want to 'fire' for start, add 'FIRE' action (1 by default)
+        self.env.step(1)
         screen = self.get_screen()
         transformed = self.transform_screen(screen)
         for i in range(self.keep_frames):
