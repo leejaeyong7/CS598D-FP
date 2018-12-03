@@ -29,24 +29,6 @@ class DQN(nn.Module):
         '''
         self.num_actions = num_actions
         self.device = torch.device('cpu')
-
-
-        # self.steps = 0
-        # # 1x84x84 => 32x20x20
-        # self.conv1 = nn.Conv2d(4, 32, kernel_size=8, stride=4)
-        # # 32x20x20 => 64x9x9
-        # self.conv2 = nn.Conv2d(32, 64, kernel_size=4, stride=2)
-        # # 128*7*7 => num actions
-        # self.feature_extraction = nn.Sequential(
-        #     self.conv1,
-        #     nn.ReLU(),
-        #     self.conv2,
-        #     nn.ReLU())
-        # self.action_fc = nn.Linear(64* 9 * 9, 256)
-        # self.state_fc = nn.Linear(64 * 9 * 9, 256)
-        # self.action_values = nn.Linear(256, num_actions)
-        # self.state_values = nn.Linear(256, 1)
-
         self.steps = 0
         # 1x84x84 => 32x20x20
         self.conv1 = nn.Conv2d(4, 32, kernel_size=8, stride=4)

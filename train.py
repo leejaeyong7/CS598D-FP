@@ -17,6 +17,7 @@ from DQN import DQN
 from torch.nn.utils import clip_grad_value_
 from game import Game
 from replay_memory import ReplayMemory
+from prioritize_memory import Memory
 from tensorboardX import SummaryWriter
 
 import logging
@@ -51,8 +52,9 @@ writer = SummaryWriter()
 
 optimizer = optim.RMSprop(policy.parameters(), lr=LEARNING_RATE)
 
-MEMORY_CAPACITY = 1000000
-memory = ReplayMemory(MEMORY_CAPACITY)
+MEMORY_CAPACITY = 100000
+# memory = ReplayMemory(MEMORY_CAPACITY)
+memory = Memory(MEMORY_CAPACITY)
 
 
 def calculate_loss(experience, weights):
@@ -127,7 +129,7 @@ for episode in count():
 
         # save next state
         next_state = game.get_state()
-        memory.push((state, action, next_state, reward, done))
+        memory.store((state, action, next_state, reward, done))
         state = next_state
 
         optimizer.zero_grad()
@@ -135,7 +137,7 @@ for episode in count():
         # perform standard DQN update with prioritized experience replay
         indices, experience, weights = memory.sample(BATCH_SIZE)
         loss, errors, reward = calculate_loss(experience, weights)
-        memory.update_tree_nodes(indices, errors)
+        memory.batch_update(indices, errors)
         loss.backward()
 
         # clip gradient
