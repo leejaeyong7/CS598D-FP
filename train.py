@@ -30,7 +30,8 @@ REWARD_DECAY = 0.99
 GRAD_CLIP = 1
 TARGET_UPDATE = 50000
 NUM_FRAMES = 50000000
-LEARNING_RATE = 0.00025
+# LEARNING_RATE = 0.00025
+LEARNING_RATE = 1e-4
 
 MODEL_PATH = './dqn-tennis.model'
 
@@ -49,7 +50,8 @@ target.eval()
 
 writer = SummaryWriter()
 
-optimizer = optim.RMSprop(policy.parameters(), lr=LEARNING_RATE)
+# optimizer = optim.RMSprop(policy.parameters(), lr=LEARNING_RATE)
+optimizer = optim.Adam(policy.parameters(), lr=LEARNING_RATE)
 
 MEMORY_CAPACITY = 1000000
 memory = ReplayMemory(MEMORY_CAPACITY)
@@ -135,8 +137,8 @@ for episode in count():
         # perform standard DQN update with prioritized experience replay
         indices, experience, weights = memory.sample(BATCH_SIZE)
         loss, errors, reward = calculate_loss(experience, weights)
-        memory.update_tree_nodes(indices, errors)
         loss.backward()
+        memory.update_tree_nodes(indices, errors)
 
         # clip gradient
         clip_grad_value_(policy.parameters(), GRAD_CLIP)
@@ -157,7 +159,7 @@ for episode in count():
             torch.save(policy, MODEL_PATH)
 
         # check if game is done
-        if(done):
+        if(done or t > 3000):
             break
 
     episode_update_reward /= episode_update

@@ -16,13 +16,14 @@ import torchvision.transforms as T
 from torch.utils.data import Dataset
 
 class Game(Dataset):
-    def __init__(self, gym_game_type, transform, keep_frames=4):
+    def __init__(self, gym_game_type, transform, keep_frames=4, rand_noop_max=30):
         self.env = gym.make(gym_game_type).unwrapped
         self.keep_frames = keep_frames
         self.frames = deque([], maxlen=keep_frames)
         self.env.reset()
         self.transform = transform
         self.actions = self.env.action_space
+        self.rand_noop_max = rand_noop_max
 
     def get_state(self):
         return np.stack(self.frames, axis=1)
@@ -31,7 +32,8 @@ class Game(Dataset):
         return self.env.render(mode='rgb_array').transpose((2, 0, 1))
 
     def transform_screen(self, screen):
-        return self.transform(torch.from_numpy(screen))
+        transformed = self.transform(torch.from_numpy(screen))
+        return (transformed * 256).byte().numpy()
 
     def apply_action(self, action):
         obs, reward, done, _ = self.env.step(action)
@@ -42,8 +44,15 @@ class Game(Dataset):
 
     def reset(self):
         obs = self.env.reset()
+        num_noops = random.randint(0, self.rand_noop_max)
+        # since we want to initialize randomly(to prevent overfitting start)
+        # apply noop action random times
+        for i in range(num_noops):
+            self.env.step(0)
         # since we want to 'fire' for start, add 'FIRE' action (1 by default)
-        self.env.step(1)
+        obs, reward, done, _ = self.env.step(1)
+        if(done):
+            self.env.reset()
         screen = self.get_screen()
         transformed = self.transform_screen(screen)
         for i in range(self.keep_frames):

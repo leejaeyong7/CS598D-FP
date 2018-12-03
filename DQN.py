@@ -15,8 +15,8 @@ import torch.nn.functional as F
 import torchvision.transforms as T
 
 EPS_START = 1.0
-EPS_END = 0.1
-EPS_DECAY = 200
+EPS_END = 0.10
+EPS_DECAY = 200000
 EPS_STEP_END = 1000000
 
 
@@ -73,6 +73,7 @@ class DQN(nn.Module):
         return self
 
     def forward(self, x):
+        x = x.float() / 256
         x = self.feature_extraction(x).view(x.size(0), -1)
         action_v = self.action_values(self.action_fc(x))
         state_v = self.state_values(self.state_fc(x))
