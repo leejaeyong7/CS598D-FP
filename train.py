@@ -15,6 +15,7 @@ import torch.nn.functional as F
 import torchvision.transforms as T
 from DQN import DQN
 from torch.nn.utils import clip_grad_value_
+from atari_wrappers import make_atari, wrap_deepmind
 from game import Game
 from replay_memory import ReplayMemory
 from tensorboardX import SummaryWriter
@@ -35,16 +36,19 @@ LEARNING_RATE = 1e-4
 
 MODEL_PATH = './dqn-tennis.model'
 
-transform = T.Compose([
-  T.ToPILImage(),
-  T.Resize((84, 84), interpolation=Image.CUBIC),
-  T.Grayscale(),
-  T.ToTensor()])
+# transform = T.Compose([
+#   T.ToPILImage(),
+#   T.Resize((84, 84), interpolation=Image.CUBIC),
+#   T.Grayscale(),
+#   T.ToTensor()])
 
-game = Game('TennisDeterministic-v4', transform=transform, keep_frames=4)
+# game = Game('TennisDeterministic-v4', transform=transform, keep_frames=4)
+game = make_atari('BreakoutNoFrameskip-v4')
+game = wrap_deepmind(game, frame_stack=True, clip_rewards=False, pytorch_img=True)
 device = torch.device('cuda:1')
-policy = DQN(num_actions=game.actions.n).to(device)
-target = DQN(num_actions=game.actions.n).to(device)
+num_actions = game.action_space.n
+policy = DQN(num_actions=num_actions).to(device)
+target = DQN(num_actions=num_actions).to(device)
 target.load_state_dict(policy.state_dict())
 target.eval()
 
@@ -87,23 +91,23 @@ def calculate_loss(experience, weights):
 
 
 # initialize
-game.reset()
+state = game.reset()
 
-state = game.get_state()
+# state = game.get_state()
 logging.info('Filling up memory')
 # first fill in memory with experiences
 for t in range(MEMORY_CAPACITY):
     # sample action from observed state
     action = game.actions.sample()
-    obs, reward, done, info = game.apply_action(action)
+    next_state, reward, done, info = game.step(action)
 
-    next_state = game.get_state()
+    # next_state = game.get_state()
     memory.push((state, action, next_state, reward, done))
     state = next_state
 
     if(done):
-        game.reset()
-        state = game.get_state()
+        state = game.reset()
+        # state = game.get_state()
 
     if((t % 50000) == 0):
         logging.info('finished {:.02f} %'.format(t / MEMORY_CAPACITY * 100))
@@ -113,22 +117,22 @@ logging.info('Training Start')
 total_frame_count = 0
 for episode in count():
     # initialize
-    game.reset()
+    state = game.reset()
     policy.train()
 
     episode_reward = 0
     episode_update_reward = 0
     episode_update = 0
 
-    state = game.get_state()
+    # state = game.get_state()
     for t in count():
         # sample action from observed state
         action = policy.get_greedy_action(state)
-        obs, reward, done, info = game.apply_action(action)
+        next_state, reward, done, info = game.step(action)
         episode_reward += reward
 
         # save next state
-        next_state = game.get_state()
+        # next_state = game.get_state()
         memory.push((state, action, next_state, reward, done))
         state = next_state
 
@@ -170,11 +174,12 @@ for episode in count():
     # create video every 100 episodes
     if((episode % 100) == 0):
         policy.eval()
-        obs = game.reset()
+        state = game.reset()
         episode_video_frames = []
         for t in count():
             action = policy.get_greedy_action(state, False)
-            obs, _, done, _ = game.apply_action(action)
+            state, _, done, _ = game.step(action)
+            obs = game.env.render(mode='rgb_array').transpose((2, 0, 1))
             episode_video_frames.append(obs)
             if(done or t > 3000):
                 break
