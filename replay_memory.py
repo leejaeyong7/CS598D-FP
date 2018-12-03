@@ -97,9 +97,9 @@ class ReplayMemory(object):
             dones.append(done)
             weights[i] = weight
 
-        memory = (np.stack(states).squeeze(1).astype(np.float32) / 256.0,
+        memory = (np.stack(states).squeeze(1),
                   np.stack(actions).astype(np.long),
-                  np.stack(next_states).squeeze(1).astype(np.float32) / 256.0,
+                  np.stack(next_states).squeeze(1),
                   np.stack(rewards).astype(np.float32),
                   np.stack(dones).astype(np.uint8))
         return indices, memory, weights
