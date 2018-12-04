@@ -31,21 +31,16 @@ REWARD_DECAY = 0.99
 GRAD_CLIP = 1
 TARGET_UPDATE = 50000
 NUM_FRAMES = 50000000
+MEMORY_CAPACITY = 100000
 # LEARNING_RATE = 0.00025
 LEARNING_RATE = 1e-4
 
-MODEL_PATH = './dqn-tennis.model'
-
-# transform = T.Compose([
-#   T.ToPILImage(),
-#   T.Resize((84, 84), interpolation=Image.CUBIC),
-#   T.Grayscale(),
-#   T.ToTensor()])
-
-# game = Game('TennisDeterministic-v4', transform=transform, keep_frames=4)
+MODEL_PATH = './dqn-breakout-atari.model'
 game = make_atari('BreakoutNoFrameskip-v4')
 game = wrap_deepmind(game, frame_stack=True, clip_rewards=False, pytorch_img=True)
+
 device = torch.device('cuda:1')
+
 num_actions = game.action_space.n
 policy = DQN(num_actions=num_actions).to(device)
 target = DQN(num_actions=num_actions).to(device)
@@ -54,10 +49,7 @@ target.eval()
 
 writer = SummaryWriter()
 
-# optimizer = optim.RMSprop(policy.parameters(), lr=LEARNING_RATE)
 optimizer = optim.Adam(policy.parameters(), lr=LEARNING_RATE)
-
-MEMORY_CAPACITY = 1000000
 memory = ReplayMemory(MEMORY_CAPACITY)
 
 
@@ -98,7 +90,7 @@ logging.info('Filling up memory')
 # first fill in memory with experiences
 for t in range(MEMORY_CAPACITY):
     # sample action from observed state
-    action = game.actions.sample()
+    action = game.action_space.sample()
     next_state, reward, done, info = game.step(action)
 
     # next_state = game.get_state()
@@ -127,7 +119,7 @@ for episode in count():
     # state = game.get_state()
     for t in count():
         # sample action from observed state
-        action = policy.get_greedy_action(state)
+        action = policy.get_greedy_action(np.expand_dims(state, 0))
         next_state, reward, done, info = game.step(action)
         episode_reward += reward
 
@@ -141,12 +133,11 @@ for episode in count():
         # perform standard DQN update with prioritized experience replay
         indices, experience, weights = memory.sample(BATCH_SIZE)
         loss, errors, reward = calculate_loss(experience, weights)
-        loss.backward()
         memory.update_tree_nodes(indices, errors)
+        loss.backward()
 
         # clip gradient
         clip_grad_value_(policy.parameters(), GRAD_CLIP)
-
         optimizer.step()
 
         # update episode graph variables
@@ -177,9 +168,10 @@ for episode in count():
         state = game.reset()
         episode_video_frames = []
         for t in count():
-            action = policy.get_greedy_action(state, False)
+            action = policy.get_greedy_action(np.expand_dims(state, 0), False)
             state, _, done, _ = game.step(action)
-            obs = game.env.render(mode='rgb_array').transpose((2, 0, 1))
+            # obs = H, W, C
+            obs = game.env.render(mode='rgb_array')
             episode_video_frames.append(obs)
             if(done or t > 3000):
                 break

@@ -15,8 +15,8 @@ import torch.nn.functional as F
 import torchvision.transforms as T
 
 EPS_START = 1.0
-EPS_END = 0.10
-EPS_DECAY = 200
+EPS_END = 0.01
+EPS_DECAY = 200000
 EPS_STEP_END = 1000000
 
 
