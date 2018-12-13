@@ -29,14 +29,14 @@ logging.basicConfig(level='INFO',
 BATCH_SIZE = 32
 REWARD_DECAY = 0.99
 GRAD_CLIP = 1
-TARGET_UPDATE = 50000
+TARGET_UPDATE = 10000
 NUM_FRAMES = 50000000
-MEMORY_CAPACITY = 100000
+MEMORY_CAPACITY = 1000000
 # LEARNING_RATE = 0.00025
 LEARNING_RATE = 1e-4
 
-MODEL_PATH = './dqn-breakout-atari.model'
-game = make_atari('BreakoutNoFrameskip-v4')
+MODEL_PATH = './dqn-tennis.model'
+game = make_atari('TennisNoFrameskip-v4')
 game = wrap_deepmind(game, frame_stack=True, clip_rewards=False, pytorch_img=True)
 
 device = torch.device('cuda:1')
@@ -77,9 +77,9 @@ def calculate_loss(experience, weights):
         expected_target_q = (best_expected_target_q * REWARD_DECAY) + rewards
 
     q_diff = expected_target_q - q
-    loss = (weights * q_diff.pow(2)).mean()
+    loss = (weights * q_diff.pow(2))
     errors = torch.abs(q_diff).detach()
-    return loss, errors, rewards.mean()
+    return loss.mean(), errors, rewards.mean()
 
 
 # initialize
